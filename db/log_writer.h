@@ -27,6 +27,9 @@ namespace ROCKSDB_NAMESPACE {
 
 class WritableFileWriter;
 
+#define KV_WAL_BUF_MID_SIZE 4096
+#define KV_WAL_BUF_LARGE_SIZE (32 * 1024)
+
 namespace log {
 
 /**
@@ -136,6 +139,9 @@ class Writer {
   // pre-computed to reduce the overhead of computing the crc of the
   // record type stored in the header.
   uint32_t type_crc_[kMaxRecordType + 1];
+
+  size_t FillPhysicalRecord(RecordType t, const char *ptr, size_t n,
+                            char *buf, uint32_t *payload_crc);
 
   IOStatus EmitPhysicalRecord(const WriteOptions& write_options,
                               RecordType type, const char* ptr, size_t length);

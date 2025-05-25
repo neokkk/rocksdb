@@ -9,6 +9,10 @@
 
 #include "file/writable_file_writer.h"
 
+#include <cstdint>
+#include <iomanip>
+#include <iostream>
+
 #include <algorithm>
 #include <mutex>
 
@@ -352,12 +356,38 @@ IOStatus WritableFileWriter::Close(const IOOptions& opts) {
   return s;
 }
 
+void PrintHex(const void *addr, size_t len) {
+    const unsigned char* bytes = static_cast<const unsigned char*>(addr);
+
+    for (size_t i = 0; i < len; ++i) {
+        if (i % 16 == 0) {
+            std::cout << std::setw(16) << std::setfill('0') << std::hex << (uintptr_t)(bytes + i) << ": ";
+        }
+
+        std::cout << std::setw(2) << std::setfill('0') << std::hex << (int)bytes[i] << ' ';
+
+        if (i % 16 == 15 || i == len - 1) {
+            std::cout << '\n';
+        }
+    }
+}
+
 // write out the cached data to the OS cache or storage if direct I/O
 // enabled
-IOStatus WritableFileWriter::Flush(const IOOptions& opts) {
+IOStatus WritableFileWriter::Flush(const IOOptions& opts, bool kv) {
   if (seen_error()) {
     return GetWriterHasPreviousErrorStatus();
   }
+
+    //> nk
+    if (kv) {
+        size_t value_size = buf_.CurrentSize();
+
+        assert(type_ == kWalFile);
+        kvctl_.Store((uint32_t)key, 4, buf_.BufferStart(), buf_.CurrentSize());
+
+        return IOStatus::OK();
+    }
 
   const IOOptions io_options = FinalizeIOOptions(opts);
 
@@ -381,6 +411,7 @@ IOStatus WritableFileWriter::Flush(const IOOptions& opts) {
         s = WriteBuffered(io_options, buf_.BufferStart(), buf_.CurrentSize());
       }
     }
+
     if (!s.ok()) {
       set_seen_error(s);
       return s;
@@ -392,6 +423,7 @@ IOStatus WritableFileWriter::Flush(const IOOptions& opts) {
     if (ShouldNotifyListeners()) {
       start_ts = FileOperationInfo::StartNow();
     }
+
     s = writable_file_->Flush(io_options, nullptr);
     if (ShouldNotifyListeners()) {
       auto finish_ts = std::chrono::steady_clock::now();
@@ -419,14 +451,15 @@ IOStatus WritableFileWriter::Flush(const IOOptions& opts) {
   // Xfs does neighbor page flushing outside of the specified ranges. We
   // need to make sure sync range is far from the write offset.
   if (!use_direct_io() && bytes_per_sync_) {
-    const uint64_t kBytesNotSyncRange =
-        1024 * 1024;                                // recent 1MB is not synced.
+    const uint64_t kBytesNotSyncRange = 1024 * 1024; // recent 1MB is not synced.
     const uint64_t kBytesAlignWhenSync = 4 * 1024;  // Align 4KB.
     uint64_t cur_size = filesize_.load(std::memory_order_acquire);
+
     if (cur_size > kBytesNotSyncRange) {
       uint64_t offset_sync_to = cur_size - kBytesNotSyncRange;
       offset_sync_to -= offset_sync_to % kBytesAlignWhenSync;
       assert(offset_sync_to >= last_sync_size_);
+
       if (offset_sync_to > 0 &&
           offset_sync_to - last_sync_size_ >= bytes_per_sync_) {
         s = RangeSync(io_options, last_sync_size_,

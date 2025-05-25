@@ -9,7 +9,7 @@
 
 #include "db/log_writer.h"
 
-#include <cstdint>
+#include <cstddef>
 
 #include "file/writable_file_writer.h"
 #include "rocksdb/env.h"
@@ -17,6 +17,7 @@
 #include "util/coding.h"
 #include "util/crc32c.h"
 #include "util/udt_util.h"
+// #include "utilities/kvctl/controller.h"
 
 namespace ROCKSDB_NAMESPACE::log {
 
@@ -34,6 +35,8 @@ Writer::Writer(std::unique_ptr<WritableFileWriter>&& dest, uint64_t log_number,
       compress_(nullptr),
       track_and_verify_wals_(track_and_verify_wals),
       last_seqno_recorded_(0) {
+    int ret;
+
   for (uint8_t i = 0; i <= kMaxRecordType; i++) {
     char t = static_cast<char>(i);
     type_crc_[i] = crc32c::Value(&t, 1);
@@ -50,6 +53,7 @@ Writer::~Writer() {
   if (compress_) {
     delete compress_;
   }
+
   ThreadStatusUtil::SetThreadOperation(cur_op_type);
 }
 
@@ -86,12 +90,14 @@ bool Writer::PublishIfClosed() {
   }
 }
 
+//> nk
 IOStatus Writer::AddRecord(const WriteOptions& write_options,
                            const Slice& slice, const SequenceNumber& seqno) {
   IOStatus s = MaybeHandleSeenFileWriterError();
   if (!s.ok()) {
     return s;
   }
+
   const char* ptr = slice.data();
   size_t left = slice.size();
 
@@ -101,6 +107,7 @@ IOStatus Writer::AddRecord(const WriteOptions& write_options,
   bool begin = true;
   int compress_remaining = 0;
   bool compress_start = false;
+
   if (compress_) {
     compress_->Reset();
     compress_start = true;
@@ -108,9 +115,24 @@ IOStatus Writer::AddRecord(const WriteOptions& write_options,
 
   IOOptions opts;
   s = WritableFileWriter::PrepareIOOptions(write_options, opts);
+
+    //> nk: use WAL command
+    if (left <= 40) {
+        RecordType type = recycle_log_files_ ? kRecyclableFullType : kFullType;
+        s = EmitPhysicalRecord(write_options, type, ptr, left);
+        s = dest_->Flush(opts, true);
+        return s;
+    }
+
+    uint64_t base_size;
+    if (left <= KV_WAL_BUF_MID_SIZE)
+        base_size = KV_WAL_BUF_MID_SIZE;
+    else
+        base_size = kBlockSize;
+
   if (s.ok()) {
     do {
-      const int64_t leftover = kBlockSize - block_offset_;
+      const int64_t leftover = base_size - block_offset_;
       assert(leftover >= 0);
       if (leftover < header_size_) {
         // Switch to a new block
@@ -130,9 +152,9 @@ IOStatus Writer::AddRecord(const WriteOptions& write_options,
       }
 
       // Invariant: we never leave < header_size bytes in a block.
-      assert(static_cast<int64_t>(kBlockSize - block_offset_) >= header_size_);
+      assert(static_cast<int64_t>(base_size - block_offset_) >= header_size_);
 
-      const size_t avail = kBlockSize - block_offset_ - header_size_;
+      const size_t avail = base_size - block_offset_ - header_size_;
 
       // Compress the record if compression is enabled.
       // Compress() is called at least once (compress_start=true) and after the
@@ -161,6 +183,7 @@ IOStatus Writer::AddRecord(const WriteOptions& write_options,
 
       RecordType type;
       const bool end = (left == fragment_length && compress_remaining == 0);
+
       if (begin && end) {
         type = recycle_log_files_ ? kRecyclableFullType : kFullType;
       } else if (begin) {
@@ -177,9 +200,10 @@ IOStatus Writer::AddRecord(const WriteOptions& write_options,
       begin = false;
     } while (s.ok() && (left > 0 || compress_remaining > 0));
   }
+
   if (s.ok()) {
     if (!manual_flush_) {
-      s = dest_->Flush(opts);
+      s = dest_->Flush(opts, true);
     }
   }
 
@@ -308,12 +332,11 @@ IOStatus Writer::MaybeAddUserDefinedTimestampSizeRecord(
 
 bool Writer::BufferIsEmpty() { return dest_->BufferIsEmpty(); }
 
-IOStatus Writer::EmitPhysicalRecord(const WriteOptions& write_options,
-                                    RecordType t, const char* ptr, size_t n) {
+size_t Writer::FillPhysicalRecord(RecordType t, const char *ptr, size_t n,
+                                  char *buf, uint32_t *payload_crc) {
   assert(n <= 0xffff);  // Must fit in two bytes
 
   size_t header_size;
-  char buf[kRecyclableHeaderSize];
 
   // Format the header
   buf[4] = static_cast<char>(n & 0xff);
@@ -341,22 +364,34 @@ IOStatus Writer::EmitPhysicalRecord(const WriteOptions& write_options,
   }
 
   // Compute the crc of the record type and the payload.
-  uint32_t payload_crc = crc32c::Value(ptr, n);
-  crc = crc32c::Crc32cCombine(crc, payload_crc, n);
+  *payload_crc = crc32c::Value(ptr, n);
+  crc = crc32c::Crc32cCombine(crc, *payload_crc, n);
   crc = crc32c::Mask(crc);  // Adjust for storage
+
   TEST_SYNC_POINT_CALLBACK("LogWriter::EmitPhysicalRecord:BeforeEncodeChecksum",
                            &crc);
   EncodeFixed32(buf, crc);
 
+    return header_size;
+}
+
+IOStatus Writer::EmitPhysicalRecord(const WriteOptions& write_options,
+                                    RecordType t, const char* ptr, size_t n) {
+  char buf[kRecyclableHeaderSize];
+    uint32_t payload_crc;
+    size_t header_size = FillPhysicalRecord(t, ptr, n, buf, &payload_crc);
+
   // Write the header and the payload
   IOOptions opts;
   IOStatus s = WritableFileWriter::PrepareIOOptions(write_options, opts);
+
   if (s.ok()) {
     s = dest_->Append(opts, Slice(buf, header_size), 0 /* crc32c_checksum */);
   }
   if (s.ok()) {
     s = dest_->Append(opts, Slice(ptr, n), payload_crc);
   }
+
   block_offset_ += header_size + n;
   return s;
 }

@@ -168,6 +168,11 @@ class WritableFileWriter {
   bool buffered_data_with_checksum_;
   Temperature temperature_;
 
+    //> nk
+    uint64_t key_;
+    FileType type_;
+    // Controller kvctl_;
+
  public:
   WritableFileWriter(
       std::unique_ptr<FSWritableFile>&& file, const std::string& _file_name,
@@ -222,6 +227,18 @@ class WritableFileWriter {
           file_checksum_gen_factory->CreateFileChecksumGenerator(
               checksum_gen_context);
     }
+
+    size_t pos = file_name_.rfind("/");
+    if (pos != std::string::npos) {
+        std::string fname = file_name_.substr(pos + 1);
+        ParseFileName(fname, &key_, &type_);
+    }
+
+    //> nk
+    // int ret = kvctl_.Open("/dev/kvssd");
+    // if (ret < 0) {
+    //     std::cerr << "Fail to open kvssd" << std::endl;
+    // }
   }
 
   static IOStatus Create(const std::shared_ptr<FileSystem>& fs,
@@ -245,8 +262,12 @@ class WritableFileWriter {
     io_options.io_activity =
         ThreadStatusUtil::TEST_GetExpectedIOActivity(op_type);
 #endif
+
     auto s = Close(io_options);
     s.PermitUncheckedError();
+
+    //> nk
+    // kvctl_.Close();
   }
 
   std::string file_name() const { return file_name_; }
@@ -258,7 +279,7 @@ class WritableFileWriter {
 
   IOStatus Pad(const IOOptions& opts, const size_t pad_bytes);
 
-  IOStatus Flush(const IOOptions& opts);
+  IOStatus Flush(const IOOptions& opts, bool kv = false);
 
   IOStatus Close(const IOOptions& opts);
 
