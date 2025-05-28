@@ -2058,6 +2058,13 @@ struct ReadOptions {
   explicit ReadOptions(Env::IOActivity _io_activity);
 };
 
+enum WALRelHint : int8_t {
+    kNone = -1,
+    kLow = 0,
+    kMid,
+    kHigh,
+};
+
 // Options that control write operations
 struct WriteOptions {
   // If true, the write will be flushed from the operating system
@@ -2141,6 +2148,9 @@ struct WriteOptions {
   //
   // Default: Env::IOActivity::kUnknown.
   Env::IOActivity io_activity = Env::IOActivity::kUnknown;
+
+    //> nk
+    WALRelHint wal_rel_hint = WALRelHint::kNone;
 
   WriteOptions() {}
   explicit WriteOptions(Env::IOActivity _io_activity);

@@ -117,7 +117,7 @@ IOStatus Writer::AddRecord(const WriteOptions& write_options,
   s = WritableFileWriter::PrepareIOOptions(write_options, opts);
 
     //> nk: use WAL command
-    if (left <= 40) {
+    if (left <= 40 || write_options.wal_rel_hint == kHigh) {
         RecordType type = recycle_log_files_ ? kRecyclableFullType : kFullType;
         s = EmitPhysicalRecord(write_options, type, ptr, left);
         s = dest_->Flush(opts, true);
@@ -125,7 +125,7 @@ IOStatus Writer::AddRecord(const WriteOptions& write_options,
     }
 
     uint64_t base_size;
-    if (left <= KV_WAL_BUF_MID_SIZE)
+    if (left <= KV_WAL_BUF_MID_SIZE || write_options.wal_rel_hint == kMid)
         base_size = KV_WAL_BUF_MID_SIZE;
     else
         base_size = kBlockSize;

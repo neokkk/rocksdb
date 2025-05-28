@@ -384,7 +384,7 @@ IOStatus WritableFileWriter::Flush(const IOOptions& opts, bool kv) {
         size_t value_size = buf_.CurrentSize();
 
         assert(type_ == kWalFile);
-        kvctl_.Store((uint32_t)key, 4, buf_.BufferStart(), buf_.CurrentSize());
+        // kvctl_.Store((uint32_t)key_, 4, buf_.BufferStart(), buf_.CurrentSize());
 
         return IOStatus::OK();
     }
