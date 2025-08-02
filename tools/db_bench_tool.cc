@@ -1527,7 +1527,7 @@ DEFINE_uint64(
     "is the global rate in bytes/second.");
 
 // the parameters of mix_graph
-DEFINE_double(keyrange_dist_a, 0.0,
+DEFINE_double(keyrange_dist_a, 1.0,
               "The parameter 'a' of prefix average access distribution "
               "f(x)=a*exp(b*x)+c*exp(d*x)");
 DEFINE_double(keyrange_dist_b, 0.0,
@@ -1807,6 +1807,9 @@ DEFINE_bool(track_and_verify_wals_in_manifest, false,
             "If true, enable WAL tracking in the MANIFEST");
 
 DEFINE_bool(track_and_verify_wals, false, "See Options.track_and_verify_wals");
+
+//> nk
+DEFINE_string(custom_trace_log, "LOG_custom", "Custom log for me");
 
 namespace ROCKSDB_NAMESPACE {
 namespace {
@@ -2857,7 +2860,7 @@ class Benchmark {
     }
     fprintf(stdout, "Entries:    %" PRIu64 "\n", num_);
     fprintf(stdout, "Prefix:    %d bytes\n", FLAGS_prefix_size);
-    fprintf(stdout, "Keys per prefix:    %" PRIu64 "\n", keys_per_prefix_);
+    fprintf(stdout, "KeysPerPrefix:    %" PRIu64 "\n", keys_per_prefix_);
     fprintf(stdout, "RawSize:    %.1f MB (estimated)\n",
             ((static_cast<int64_t>(FLAGS_key_size + avg_value_size) * num_) /
              1048576.0));
@@ -2882,15 +2885,17 @@ class Benchmark {
 #endif
     }
 
+    fprintf(stdout, "CompactionStyle: %d\n", FLAGS_compaction_style);
+
     auto compression = CompressionTypeToString(FLAGS_compression_type_e);
     fprintf(stdout, "Compression: %s\n", compression.c_str());
-    fprintf(stdout, "Compression sampling rate: %" PRId64 "\n",
+    fprintf(stdout, "CompressionSamplingRate: %" PRId64 "\n",
             FLAGS_sample_for_compression);
     if (options.memtable_factory != nullptr) {
       fprintf(stdout, "Memtablerep: %s\n",
               options.memtable_factory->GetId().c_str());
     }
-    fprintf(stdout, "Perf Level: %d\n", FLAGS_perf_level);
+    fprintf(stdout, "PerfLevel: %d\n", FLAGS_perf_level);
 
     PrintWarnings(compression.c_str());
     fprintf(stdout, "------------------------------------------------\n");
@@ -3452,11 +3457,14 @@ class Benchmark {
     if (!SanityCheck()) {
       ErrorExit();
     }
+
     Open(&open_options_, hooks);
     PrintHeader(open_options_);
+
     std::stringstream benchmark_stream(FLAGS_benchmarks);
     std::string name;
     std::unique_ptr<ExpiredTimeFilter> filter;
+
     while (std::getline(benchmark_stream, name, ',')) {
       // Sanitize parameters
       num_ = FLAGS_num;
@@ -3994,6 +4002,7 @@ class Benchmark {
     shared.num_initialized = 0;
     shared.num_done = 0;
     shared.start = false;
+
     if (FLAGS_benchmark_write_rate_limit > 0) {
       shared.write_rate_limiter.reset(
           NewGenericRateLimiter(FLAGS_benchmark_write_rate_limit));
@@ -4837,6 +4846,8 @@ class Benchmark {
       }
     }
 
+    options.custom_trace_log = FLAGS_custom_trace_log; //> nk
+
     options.listeners.emplace_back(listener_);
 
     if (options.file_checksum_gen_factory == nullptr) {
@@ -4895,6 +4906,7 @@ class Benchmark {
               DBWithColumnFamilies* db) {
     uint64_t open_start = FLAGS_report_open_timing ? FLAGS_env->NowNanos() : 0;
     Status s;
+    
     // Open with column families if necessary.
     if (FLAGS_num_column_families > 1) {
       size_t num_hot = FLAGS_num_column_families;
@@ -5551,6 +5563,7 @@ class Benchmark {
         ErrorExit();
       }
     }
+
     if ((write_mode == UNIQUE_RANDOM) && (p > 0.0)) {
       fprintf(stdout,
               "Number of unique keys inserted: %" PRIu64
@@ -8657,6 +8670,7 @@ int db_bench_tool(int argc, char** argv, ToolHooks& hooks) {
   ROCKSDB_NAMESPACE::port::InstallStackTraceHandler();
   ConfigOptions config_options;
   static bool initialized = false;
+
   if (!initialized) {
     SetUsageMessage(std::string("\nUSAGE:\n") + std::string(argv[0]) +
                     " [OPTIONS]...");

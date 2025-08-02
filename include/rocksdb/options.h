@@ -733,6 +733,8 @@ struct DBOptions {
   // Default: nullptr
   std::shared_ptr<Logger> info_log = nullptr;
 
+  std::string custom_trace_log = ""; //> nk
+
   // Minimum level for sending log messages to info_log. The default is
   // INFO_LEVEL when RocksDB is compiled in release mode, and DEBUG_LEVEL
   // when it is compiled in debug mode.

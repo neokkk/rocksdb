@@ -15,6 +15,7 @@
 
 #include <cinttypes>
 #include <cstdio>
+#include <iostream>
 #include <map>
 #include <memory>
 #include <optional>
@@ -61,6 +62,7 @@
 #include "file/filename.h"
 #include "file/random_access_file_reader.h"
 #include "file/sst_file_manager_impl.h"
+#include "file/writable_file_writer.h"
 #include "logging/auto_roll_logger.h"
 #include "logging/log_buffer.h"
 #include "logging/logging.h"
@@ -227,6 +229,14 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname,
   // !batch_per_trx_ implies seq_per_batch_ because it is only unset for
   // WriteUnprepared, which should use seq_per_batch_.
   assert(batch_per_txn_ || seq_per_batch_);
+
+  //> nk
+  std::unique_ptr<WritableFile> custom_trace_wf;
+  const EnvOptions env_options;
+  Status s = env_->NewWritableFile(options.custom_trace_log, &custom_trace_wf, env_options);
+  assert(s.ok());
+  immutable_db_options_.custom_trace_wf = custom_trace_wf.get();
+  std::cout << "Create new custom trace log: LOG_custom" << std::endl;
 
   // Reserve ten files or so for other uses and give the rest to TableCache.
   // Give a large number for setting of "infinite" open files.

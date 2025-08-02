@@ -543,6 +543,7 @@ Status WriteBatchInternal::Iterate(const WriteBatch* wb,
   uint32_t column_family = 0;  // default
   bool last_was_try_again = false;
   bool handler_continue = true;
+
   while (((s.ok() && !input.empty()) || UNLIKELY(s.IsTryAgain()))) {
     handler_continue = handler->Continue();
     if (!handler_continue) {

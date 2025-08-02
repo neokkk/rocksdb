@@ -12,6 +12,7 @@
 #include <cstdio>
 
 #include "db/lookup_key.h"
+#include "dbformat.h"
 #include "monitoring/perf_context_imp.h"
 #include "port/port.h"
 #include "util/coding.h"
@@ -184,11 +185,32 @@ std::string ParsedInternalKey::DebugString(bool log_err_key, bool hex,
   return result;
 }
 
+std::string ParsedInternalKey::ToString() const {
+  std::string result = "";
+  std::string hi_str = user_key.ToString(true).substr(0, 16);
+  uint64_t hex_to_dec = std::stoull(hi_str, nullptr, 16);
+  result += std::to_string(hex_to_dec);
+  return result;
+}
+
 std::string InternalKey::DebugString(bool hex, const Comparator* ucmp) const {
   std::string result;
   ParsedInternalKey parsed;
   if (ParseInternalKey(rep_, &parsed, false /* log_err_key */).ok()) {
     result = parsed.DebugString(true /* log_err_key */, hex, ucmp);  // TODO
+  } else {
+    result = "(bad)";
+    result.append(EscapeString(rep_));
+  }
+  return result;
+}
+
+std::string InternalKey::ToString() const {
+  std::string result;
+  ParsedInternalKey parsed;
+  Status s = ParseInternalKey(rep_, &parsed, false /* log_err_key */);
+  if (ParseInternalKey(rep_, &parsed, false /* log_err_key */).ok()) {
+    result = parsed.ToString();
   } else {
     result = "(bad)";
     result.append(EscapeString(rep_));

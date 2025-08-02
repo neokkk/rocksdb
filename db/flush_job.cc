@@ -11,6 +11,9 @@
 
 #include <algorithm>
 #include <cinttypes>
+#include <iomanip>
+#include <iostream>
+#include <sstream>
 #include <vector>
 
 #include "db/builder.h"
@@ -172,6 +175,7 @@ void FlushJob::RecordFlushIOStats() {
       ThreadStatus::FLUSH_BYTES_WRITTEN, IOSTATS(bytes_written));
   IOSTATS_RESET(bytes_written);
 }
+
 void FlushJob::PickMemTable() {
   db_mutex_->AssertHeld();
   assert(!pick_memtable_called);
@@ -258,6 +262,7 @@ Status FlushJob::Run(LogsWithPrepTracker* prep_tracker, FileMetaData* file_meta,
     prev_cpu_write_nanos = IOSTATS(cpu_write_nanos);
     prev_cpu_read_nanos = IOSTATS(cpu_read_nanos);
   }
+
   Status mempurge_s = Status::NotFound("No MemPurge.");
   if ((mempurge_threshold > 0.0) &&
       (flush_reason_ == FlushReason::kWriteBufferFull) && (!mems_.empty()) &&
@@ -288,6 +293,7 @@ Status FlushJob::Run(LogsWithPrepTracker* prep_tracker, FileMetaData* file_meta,
       }
     }
   }
+
   Status s;
   if (mempurge_s.ok()) {
     base_->Unref();
@@ -850,6 +856,15 @@ bool FlushJob::MemPurgeDecider(double threshold) {
           threshold);
 }
 
+std::string SliceToHex(const Slice &s) {
+  std::ostringstream oss;
+  for (size_t i = 0; i < s.size(); ++i) {
+    oss << std::hex << std::setw(2) << std::setfill('0');
+    oss << (static_cast<unsigned int>(static_cast<unsigned char>(s[i])));
+  }
+  return oss.str();
+}
+
 Status FlushJob::WriteLevel0Table() {
   AutoThreadOperationStageUpdater stage_updater(
       ThreadStatus::STAGE_FLUSH_WRITE_L0);
@@ -1014,10 +1029,12 @@ Status FlushJob::WriteLevel0Table() {
           event_logger_, job_context_->job_id, &table_properties_, write_hint,
           full_history_ts_low, blob_callback_, base_, &memtable_payload_bytes,
           &memtable_garbage_bytes, &flush_stats);
+
       TEST_SYNC_POINT_CALLBACK("FlushJob::WriteLevel0Table:s", &s);
       // TODO: Cleanup io_status in BuildTable and table builders
       assert(!s.ok() || io_s.ok());
       io_s.PermitUncheckedError();
+
       if (s.ok() && total_num_input_entries != flush_stats.num_input_records) {
         std::string msg = "Expected " +
                           std::to_string(total_num_input_entries) +
@@ -1108,6 +1125,21 @@ Status FlushJob::WriteLevel0Table() {
   }
   // Piggyback FlushJobInfo on the first first flushed memtable.
   mems_[0]->SetFlushJobInfo(GetFlushJobInfo());
+
+  //> nk
+  std::stringstream ss;
+  port::TimeVal now_tv;
+  port::GetTimeOfDay(&now_tv, nullptr);
+  const time_t seconds = now_tv.tv_sec;
+  struct tm t;
+
+  port::LocalTimeR(&seconds, &t);
+  ss << t.tm_year + 1900 << "/" << t.tm_mon + 1 << "/" << t.tm_mday << "-";
+  ss << t.tm_hour << ":" << t.tm_min << ":" << t.tm_sec << "." << static_cast<int>(now_tv.tv_usec);
+  ss << " Flushed table #" << meta_.fd.GetNumber();
+  ss << ": [" << meta_.smallest.ToString() << ", " << meta_.largest.ToString() << "]";
+  // db_options_.custom_trace_wf->Append(ss.str());
+  printf("%s\n", ss.str().c_str());
 
   const uint64_t micros = clock_->NowMicros() - start_micros;
   const uint64_t cpu_micros = clock_->CPUMicros() - start_cpu_micros;

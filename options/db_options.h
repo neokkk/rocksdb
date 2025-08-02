@@ -116,6 +116,8 @@ struct ImmutableDBOptions {
   Logger* logger;
   // End of convenience/helper objects.
 
+  mutable WritableFile *custom_trace_wf; //> nk
+
   bool IsWalDirSameAsDBPath() const;
   bool IsWalDirSameAsDBPath(const std::string& path) const;
   const std::string& GetWalDir() const;

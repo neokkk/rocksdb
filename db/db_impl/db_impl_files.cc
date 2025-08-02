@@ -387,6 +387,18 @@ void DBImpl::DeleteObsoleteFileImpl(int job_id, const std::string& fname,
                     "[JOB %d] Delete %s type=%d #%" PRIu64 " -- %s\n", job_id,
                     fname.c_str(), type, number,
                     file_deletion_status.ToString().c_str());
+    //> nk
+    std::stringstream ss;
+    port::TimeVal now_tv;
+    port::GetTimeOfDay(&now_tv, nullptr);
+    const time_t seconds = now_tv.tv_sec;
+    struct tm t;
+
+    port::LocalTimeR(&seconds, &t);
+    ss << t.tm_year + 1900 << "/" << t.tm_mon + 1 << "/" << t.tm_mday << "-";
+    ss << t.tm_hour << ":" << t.tm_min << ":" << t.tm_sec << "." << static_cast<int>(now_tv.tv_usec);
+    ss << " Delete table #" << number << " (" << type << ")";
+    printf("%s\n", ss.str().c_str());
   } else if (env_->FileExists(fname).IsNotFound()) {
     ROCKS_LOG_INFO(
         immutable_db_options_.info_log,

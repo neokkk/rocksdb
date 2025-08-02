@@ -11,6 +11,7 @@
 #include <stdio.h>
 
 #include <array>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <string>
@@ -150,8 +151,10 @@ struct ParsedInternalKey {
   // u contains timestamp if user timestamp feature is enabled.
   ParsedInternalKey(const Slice& u, const SequenceNumber& seq, ValueType t)
       : user_key(u), sequence(seq), type(t) {}
+
   std::string DebugString(bool log_err_key, bool hex,
                           const Comparator* ucmp = nullptr) const;
+  std::string ToString() const;
 
   void clear() {
     user_key.clear();
@@ -509,6 +512,7 @@ class InternalKey {
   }
 
   std::string DebugString(bool hex, const Comparator* ucmp = nullptr) const;
+  std::string ToString() const;
 };
 
 inline int InternalKeyComparator::Compare(const InternalKey& a,
@@ -782,6 +786,8 @@ class IterKey {
     size_t psize = key_prefix.size();
     size_t usize = user_key.size();
     size_t ts_sz = (ts != nullptr ? ts->size() : 0);
+
+    std::cout << "SetInternalKey: " << user_key.data() << std::endl;
     EnlargeBufferIfNeeded(psize + usize + sizeof(uint64_t) + ts_sz);
     if (psize > 0) {
       memcpy(buf_, key_prefix.data(), psize);

@@ -1776,10 +1776,12 @@ Status CompactionJob::FinishCompactionOutputFile(
                    meta->marked_for_compaction ? " (need compaction)" : "",
                    temperature_to_string[meta->temperature].c_str());
   }
+
   std::string fname;
   FileDescriptor output_fd;
   uint64_t oldest_blob_file_number = kInvalidBlobFileNumber;
   Status status_for_listener = s;
+
   if (meta != nullptr) {
     fname = GetTableFileName(meta->fd.GetNumber());
     output_fd = meta->fd;
@@ -1790,6 +1792,23 @@ Status CompactionJob::FinishCompactionOutputFile(
       status_for_listener = Status::Aborted("Empty SST file not kept");
     }
   }
+
+  //> nk
+  std::stringstream ss;
+  port::TimeVal now_tv;
+  port::GetTimeOfDay(&now_tv, nullptr);
+  const time_t seconds = now_tv.tv_sec;
+  struct tm t;
+
+  port::LocalTimeR(&seconds, &t);
+  ss << t.tm_year + 1900 << "/" << t.tm_mon + 1 << "/" << t.tm_mday << "-";
+  ss << t.tm_hour << ":" << t.tm_min << ":" << t.tm_sec << "." << static_cast<int>(now_tv.tv_usec);
+  ss << " Generated table #" << meta->fd.GetNumber();
+  ss << "@" << sub_compact->compaction->output_level();
+  ss << ": [" << meta->smallest.ToString() << ", " << meta->largest.ToString() << "]";
+  // db_options_.custom_trace_wf->Append(ss.str());
+  printf("%s\n", ss.str().c_str());
+
   EventHelpers::LogAndNotifyTableFileCreationFinished(
       event_logger_, cfd->ioptions().listeners, dbname_, cfd->GetName(), fname,
       job_id_, output_fd, oldest_blob_file_number, tp,
@@ -1829,6 +1848,47 @@ Status CompactionJob::InstallCompactionResults(bool* compaction_released) {
 
   auto* compaction = compact_->compaction;
   assert(compaction);
+
+  //> nk
+  std::stringstream ss;
+  port::TimeVal now_tv;
+  port::GetTimeOfDay(&now_tv, nullptr);
+  const time_t seconds = now_tv.tv_sec;
+  struct tm t;
+
+  port::LocalTimeR(&seconds, &t);
+  ss << t.tm_year + 1900 << "/" << t.tm_mon + 1 << "/" << t.tm_mday << "-";
+  ss << t.tm_hour << ":" << t.tm_min << ":" << t.tm_sec << "." << static_cast<int>(now_tv.tv_usec);
+  ss << " Compacted ";
+
+  size_t num_input_levels = compaction->num_input_levels();
+  bool first_level_printed = false;
+
+  for (size_t i = 0; i < num_input_levels; ++i) {
+    const std::vector<rocksdb::FileMetaData *> *files = compaction->inputs(i);
+    if (files == nullptr || files->empty()) continue;
+
+    if (first_level_printed) {
+      ss << ", ";
+    }
+    first_level_printed = true;
+
+    ss << i << ": [";
+    for (size_t j = 0; j < files->size(); ++j) {
+      ss << (*files)[j]->fd.GetNumber();
+      if (j < files->size() - 1) {
+        ss << ", ";
+      }
+    }
+    ss << "]";
+  }
+
+  std::string result = ss.str();
+  if (result.size() >= 2 && result.substr(result.size() - 2) == ", ") {
+    result.erase(result.size() - 2); // remove last ", "
+  }
+  // immutable_db_options_.custom_trace_wf->Append(result);
+  printf("%s\n", result.c_str());
 
   {
     Compaction::InputLevelSummaryBuffer inputs_summary;
