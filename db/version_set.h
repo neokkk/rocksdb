@@ -635,6 +635,28 @@ class VersionStorageInfo {
 
   const Comparator* user_comparator() const { return user_comparator_; }
 
+  std::pair<std::unordered_map<uint64_t, uint32_t>::iterator, bool>
+  InitializeNontriggerCount(uint64_t file_number) {
+    return compaction_nontrigger_counter_.insert({file_number, 0});
+  }
+
+  bool IncreaseNontriggerCount(uint64_t file_number) {
+    auto result = InitializeNontriggerCount(file_number);
+    if (!result.second) {
+      result.first->second++;
+      return true;
+    }
+    return false; // initialized to 0
+  }
+
+  uint32_t GetNontriggerCount(uint64_t file_number) {
+    return compaction_nontrigger_counter_[file_number];
+  }
+
+  void RemoveNontriggerCount(uint64_t file_number) {
+    compaction_nontrigger_counter_.erase(file_number);
+  }
+
  private:
   void ComputeCompensatedSizes();
   void UpdateNumNonEmptyLevels();
@@ -792,6 +814,8 @@ class VersionStorageInfo {
   EpochNumberRequirement epoch_number_requirement_;
 
   OffpeakTimeOption offpeak_time_option_;
+
+  std::unordered_map<uint64_t, uint32_t> compaction_nontrigger_counter_; //> nk: non-compaction target regardless of level;
 
   friend class Version;
   friend class VersionSet;

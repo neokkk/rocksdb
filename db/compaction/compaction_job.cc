@@ -1781,11 +1781,24 @@ Status CompactionJob::FinishCompactionOutputFile(
   FileDescriptor output_fd;
   uint64_t oldest_blob_file_number = kInvalidBlobFileNumber;
   Status status_for_listener = s;
+  auto vstorage = cfd->current()->storage_info();
+  int output_level = sub_compact->compaction->output_level();
 
   if (meta != nullptr) {
     fname = GetTableFileName(meta->fd.GetNumber());
     output_fd = meta->fd;
     oldest_blob_file_number = meta->oldest_blob_file_number;
+
+    //> nk
+    vstorage->InitializeNontriggerCount(output_number);
+
+    auto &level_files = vstorage->files_[output_level - 1];
+    for (size_t i = 0; i < level_files.size(); i++) {
+      FileMetaData *f = level_files[i];
+      auto fnum = f->fd.GetNumber();
+      if (fnum == output_number) continue;
+      vstorage->IncreaseNontriggerCount(fnum);
+    }
   } else {
     fname = "(nil)";
     if (s.ok()) {
@@ -1804,7 +1817,7 @@ Status CompactionJob::FinishCompactionOutputFile(
   ss << t.tm_year + 1900 << "/" << t.tm_mon + 1 << "/" << t.tm_mday << "-";
   ss << t.tm_hour << ":" << t.tm_min << ":" << t.tm_sec << "." << static_cast<int>(now_tv.tv_usec);
   ss << " Generated table #" << meta->fd.GetNumber();
-  ss << "@" << sub_compact->compaction->output_level();
+  ss << "@" << output_level;
   ss << ": [" << meta->smallest.ToString() << ", " << meta->largest.ToString() << "]";
   // db_options_.custom_trace_wf->Append(ss.str());
   printf("%s\n", ss.str().c_str());

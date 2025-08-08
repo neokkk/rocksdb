@@ -6330,6 +6330,7 @@ Status DBImpl::ClipColumnFamily(ColumnFamilyHandle* column_family,
 
   if (status.ok()) {
     // DeleteFilesInRanges non-overlap files except L0
+    //
     std::vector<RangeOpt> ranges;
     ranges.emplace_back(OptSlice{}, begin_key);
     ranges.emplace_back(end_key, OptSlice{});

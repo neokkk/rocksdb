@@ -43,6 +43,7 @@
 #include "db/wide/wide_columns_helper.h"
 #include "file/file_util.h"
 #include "table/compaction_merging_iterator.h"
+#include "version_set.h"
 
 #if USE_COROUTINES
 #include "folly/coro/BlockingWait.h"

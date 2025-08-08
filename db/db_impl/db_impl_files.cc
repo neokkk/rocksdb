@@ -387,7 +387,9 @@ void DBImpl::DeleteObsoleteFileImpl(int job_id, const std::string& fname,
                     "[JOB %d] Delete %s type=%d #%" PRIu64 " -- %s\n", job_id,
                     fname.c_str(), type, number,
                     file_deletion_status.ToString().c_str());
+
     //> nk
+    VersionStorageInfo *vstorage = versions_->current()->storage_info();
     std::stringstream ss;
     port::TimeVal now_tv;
     port::GetTimeOfDay(&now_tv, nullptr);
@@ -397,8 +399,10 @@ void DBImpl::DeleteObsoleteFileImpl(int job_id, const std::string& fname,
     port::LocalTimeR(&seconds, &t);
     ss << t.tm_year + 1900 << "/" << t.tm_mon + 1 << "/" << t.tm_mday << "-";
     ss << t.tm_hour << ":" << t.tm_min << ":" << t.tm_sec << "." << static_cast<int>(now_tv.tv_usec);
-    ss << " Delete table #" << number << " (" << type << ")";
+    ss << " Deleted table #" << number << " (count: " << vstorage->GetNontriggerCount() << ")";
     printf("%s\n", ss.str().c_str());
+
+    vstorage->RemoveNontriggerCount(number);
   } else if (env_->FileExists(fname).IsNotFound()) {
     ROCKS_LOG_INFO(
         immutable_db_options_.info_log,
