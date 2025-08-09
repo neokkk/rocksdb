@@ -7621,4 +7621,5 @@ std::vector<VersionEdit>& ReactiveVersionSet::replay_buffer() {
   return manifest_tailer_->GetReadBuffer().replay_buffer();
 }
 
+std::unordered_map<uint64_t, uint32_t> VersionStorageInfo::compaction_nontrigger_counter_;
 }  // namespace ROCKSDB_NAMESPACE

@@ -43,6 +43,12 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+enum TICK_TYPE {
+  FLUSH_TICK,
+  COMPACTION_TICK,
+  OTHER = 10,
+};
+
 struct ColumnFamilyOptions;
 struct CompactionOptions;
 struct CompactRangeOptions;

@@ -370,6 +370,21 @@ void DBImpl::DeleteObsoleteFileImpl(int job_id, const std::string& fname,
                            const_cast<std::string*>(&fname));
   IGNORE_STATUS_IF_ERROR(Status::IOError());
 
+  //> nk
+  VersionStorageInfo *vstorage = versions_->GetColumnFamilySet()->GetDefault()->current()->storage_info();
+  std::stringstream ss;
+  port::TimeVal now_tv;
+  port::GetTimeOfDay(&now_tv, nullptr);
+  const time_t seconds = now_tv.tv_sec;
+  struct tm t;
+
+  port::LocalTimeR(&seconds, &t);
+  ss << t.tm_year + 1900 << "/" << t.tm_mon + 1 << "/" << t.tm_mday << "-";
+  ss << t.tm_hour << ":" << t.tm_min << ":" << t.tm_sec << "." << static_cast<int>(now_tv.tv_usec);
+  ss << " Deleted table #" << number << " (tick: " << get_tick() << ")";
+  // ss << " Deleted table #" << number << " (count: " << vstorage->GetNontriggerCount(number) << ")";
+  printf("%s\n", ss.str().c_str());
+
   Status file_deletion_status;
   if (type == kTableFile || type == kBlobFile || type == kWalFile) {
     // Rate limit WAL deletion only if its in the DB dir
@@ -387,20 +402,6 @@ void DBImpl::DeleteObsoleteFileImpl(int job_id, const std::string& fname,
                     "[JOB %d] Delete %s type=%d #%" PRIu64 " -- %s\n", job_id,
                     fname.c_str(), type, number,
                     file_deletion_status.ToString().c_str());
-
-    //> nk
-    VersionStorageInfo *vstorage = versions_->current()->storage_info();
-    std::stringstream ss;
-    port::TimeVal now_tv;
-    port::GetTimeOfDay(&now_tv, nullptr);
-    const time_t seconds = now_tv.tv_sec;
-    struct tm t;
-
-    port::LocalTimeR(&seconds, &t);
-    ss << t.tm_year + 1900 << "/" << t.tm_mon + 1 << "/" << t.tm_mday << "-";
-    ss << t.tm_hour << ":" << t.tm_min << ":" << t.tm_sec << "." << static_cast<int>(now_tv.tv_usec);
-    ss << " Deleted table #" << number << " (count: " << vstorage->GetNontriggerCount() << ")";
-    printf("%s\n", ss.str().c_str());
 
     vstorage->RemoveNontriggerCount(number);
   } else if (env_->FileExists(fname).IsNotFound()) {

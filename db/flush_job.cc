@@ -51,6 +51,7 @@
 #include "util/stop_watch.h"
 
 namespace ROCKSDB_NAMESPACE {
+extern void set_tick(TICK_TYPE type);
 
 const char* GetFlushReasonString(FlushReason flush_reason) {
   switch (flush_reason) {
@@ -1068,6 +1069,7 @@ Status FlushJob::WriteLevel0Table() {
           s = Status::Corruption(msg);
         }
       }
+
       if (tboptions.reason == TableFileCreationReason::kFlush) {
         TEST_SYNC_POINT("DBImpl::FlushJob:Flush");
         RecordTick(stats_, MEMTABLE_PAYLOAD_BYTES_AT_FLUSH,
@@ -1077,6 +1079,7 @@ Status FlushJob::WriteLevel0Table() {
       }
       LogFlush(db_options_.info_log);
     }
+
     ROCKS_LOG_BUFFER(log_buffer_,
                      "[%s] [JOB %d] Level-0 flush table #%" PRIu64 ": %" PRIu64
                      " bytes %s"
@@ -1099,6 +1102,7 @@ Status FlushJob::WriteLevel0Table() {
     TEST_SYNC_POINT_CALLBACK("FlushJob::WriteLevel0Table", &mems_);
     db_mutex_->Lock();
   }
+
   base_->Unref();
 
   // Note that if file_size is zero, the file has been deleted and
@@ -1132,14 +1136,26 @@ Status FlushJob::WriteLevel0Table() {
   port::GetTimeOfDay(&now_tv, nullptr);
   const time_t seconds = now_tv.tv_sec;
   struct tm t;
+  uint64_t fnum = meta_.fd.GetNumber();
+
+  set_tick(FLUSH_TICK);
 
   port::LocalTimeR(&seconds, &t);
   ss << t.tm_year + 1900 << "/" << t.tm_mon + 1 << "/" << t.tm_mday << "-";
   ss << t.tm_hour << ":" << t.tm_min << ":" << t.tm_sec << "." << static_cast<int>(now_tv.tv_usec);
-  ss << " Flushed table #" << meta_.fd.GetNumber();
+  ss << " Flushed table #" << fnum;
   ss << ": [" << meta_.smallest.ToString() << ", " << meta_.largest.ToString() << "]";
+  ss << " (tick: " << get_tick() << ")";
   // db_options_.custom_trace_wf->Append(ss.str());
   printf("%s\n", ss.str().c_str());
+
+  auto vstorage = cfd_->current()->storage_info();
+  auto level_files = vstorage->LevelFiles(0);
+
+  for (size_t i = 0; i < level_files.size(); i++) {
+    FileMetaData *f = level_files[i];
+    vstorage->IncreaseNontriggerCount(fnum);
+  }
 
   const uint64_t micros = clock_->NowMicros() - start_micros;
   const uint64_t cpu_micros = clock_->CPUMicros() - start_cpu_micros;

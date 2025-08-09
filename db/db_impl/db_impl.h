@@ -72,6 +72,10 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+void set_tick(TICK_TYPE type);
+
+uint64_t get_tick();
+
 class Arena;
 class ArenaWrappedDBIter;
 class InMemoryStatsHistoryIterator;

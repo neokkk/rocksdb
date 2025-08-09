@@ -58,6 +58,7 @@
 #include "util/stop_watch.h"
 
 namespace ROCKSDB_NAMESPACE {
+extern void set_tick(TICK_TYPE type);
 
 const char* GetCompactionReasonString(CompactionReason compaction_reason) {
   switch (compaction_reason) {
@@ -1784,6 +1785,25 @@ Status CompactionJob::FinishCompactionOutputFile(
   auto vstorage = cfd->current()->storage_info();
   int output_level = sub_compact->compaction->output_level();
 
+  //> nk
+  std::stringstream ss;
+  port::TimeVal now_tv;
+  port::GetTimeOfDay(&now_tv, nullptr);
+  const time_t seconds = now_tv.tv_sec;
+  struct tm t;
+
+  set_tick(COMPACTION_TICK);
+
+  port::LocalTimeR(&seconds, &t);
+  ss << t.tm_year + 1900 << "/" << t.tm_mon + 1 << "/" << t.tm_mday << "-";
+  ss << t.tm_hour << ":" << t.tm_min << ":" << t.tm_sec << "." << static_cast<int>(now_tv.tv_usec);
+  ss << " Generated table #" << meta->fd.GetNumber();
+  ss << "@" << output_level;
+  ss << ": [" << meta->smallest.ToString() << ", " << meta->largest.ToString() << "]";
+  ss << " (tick: " << get_tick() << ")";
+  // db_options_.custom_trace_wf->Append(ss.str());
+  printf("%s\n", ss.str().c_str());
+
   if (meta != nullptr) {
     fname = GetTableFileName(meta->fd.GetNumber());
     output_fd = meta->fd;
@@ -1792,11 +1812,10 @@ Status CompactionJob::FinishCompactionOutputFile(
     //> nk
     vstorage->InitializeNontriggerCount(output_number);
 
-    auto &level_files = vstorage->files_[output_level - 1];
+    auto level_files = vstorage->LevelFiles(output_level - 1);
     for (size_t i = 0; i < level_files.size(); i++) {
       FileMetaData *f = level_files[i];
       auto fnum = f->fd.GetNumber();
-      if (fnum == output_number) continue;
       vstorage->IncreaseNontriggerCount(fnum);
     }
   } else {
@@ -1805,22 +1824,6 @@ Status CompactionJob::FinishCompactionOutputFile(
       status_for_listener = Status::Aborted("Empty SST file not kept");
     }
   }
-
-  //> nk
-  std::stringstream ss;
-  port::TimeVal now_tv;
-  port::GetTimeOfDay(&now_tv, nullptr);
-  const time_t seconds = now_tv.tv_sec;
-  struct tm t;
-
-  port::LocalTimeR(&seconds, &t);
-  ss << t.tm_year + 1900 << "/" << t.tm_mon + 1 << "/" << t.tm_mday << "-";
-  ss << t.tm_hour << ":" << t.tm_min << ":" << t.tm_sec << "." << static_cast<int>(now_tv.tv_usec);
-  ss << " Generated table #" << meta->fd.GetNumber();
-  ss << "@" << output_level;
-  ss << ": [" << meta->smallest.ToString() << ", " << meta->largest.ToString() << "]";
-  // db_options_.custom_trace_wf->Append(ss.str());
-  printf("%s\n", ss.str().c_str());
 
   EventHelpers::LogAndNotifyTableFileCreationFinished(
       event_logger_, cfd->ioptions().listeners, dbname_, cfd->GetName(), fname,

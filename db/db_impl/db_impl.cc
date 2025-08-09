@@ -120,6 +120,26 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+uint64_t flush_num = 0;
+uint64_t compaction_num = 0;
+
+void set_tick(TICK_TYPE type) {
+  switch (type) {
+    case FLUSH_TICK:
+      flush_num++;
+      break;
+    case COMPACTION_TICK:
+      compaction_num++;
+      break;
+    default:
+      printf("Invalid tick type!\n");
+  }
+}
+
+uint64_t get_tick() {
+  return flush_num + compaction_num;
+}
+
 const std::string kDefaultColumnFamilyName("default");
 const std::string kPersistentStatsColumnFamilyName(
     "___rocksdb_stats_history___");
@@ -231,12 +251,12 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname,
   assert(batch_per_txn_ || seq_per_batch_);
 
   //> nk
-  std::unique_ptr<WritableFile> custom_trace_wf;
-  const EnvOptions env_options;
-  Status s = env_->NewWritableFile(options.custom_trace_log, &custom_trace_wf, env_options);
-  assert(s.ok());
-  immutable_db_options_.custom_trace_wf = custom_trace_wf.get();
-  std::cout << "Create new custom trace log: LOG_custom" << std::endl;
+  // std::unique_ptr<WritableFile> custom_trace_wf;
+  // const EnvOptions env_options;
+  // Status s = env_->NewWritableFile(options.custom_trace_log, &custom_trace_wf, env_options);
+  // assert(s.ok());
+  // immutable_db_options_.custom_trace_wf = custom_trace_wf.get();
+  // std::cout << "Create new custom trace log: LOG_custom" << std::endl;
 
   // Reserve ten files or so for other uses and give the rest to TableCache.
   // Give a large number for setting of "infinite" open files.
