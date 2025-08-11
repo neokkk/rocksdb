@@ -8,6 +8,8 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #pragma once
+#include <fcntl.h>
+#include <liburing.h>
 #include <stdint.h>
 
 #include <array>
@@ -25,6 +27,7 @@
 #include "table/meta_blocks.h"
 #include "table/table_builder.h"
 #include "util/compression.h"
+#include "util/nvme.h"
 
 namespace ROCKSDB_NAMESPACE {
 

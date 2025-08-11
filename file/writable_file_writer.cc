@@ -24,6 +24,9 @@
 #include "util/random.h"
 #include "util/rate_limiter_impl.h"
 
+#include "util/nvme.h"
+#include "util/io_uring.h"
+
 namespace ROCKSDB_NAMESPACE {
 inline Histograms GetFileWriteHistograms(Histograms file_writer_hist,
                                          Env::IOActivity io_activity) {
@@ -70,11 +73,12 @@ IOStatus WritableFileWriter::Append(const IOOptions& opts, const Slice& data,
   StopWatch sw(clock_, stats_, hist_type_,
                GetFileWriteHistograms(hist_type_, opts.io_activity));
 
-  const IOOptions io_options = FinalizeIOOptions(opts);
+  IOOptions io_options = FinalizeIOOptions(opts);
   const char* src = data.data();
   size_t left = data.size();
   IOStatus s;
   pending_sync_ = true;
+  io_options.free = false;
 
   TEST_KILL_RANDOM_WITH_WEIGHT("WritableFileWriter::Append:0", REDUCE_ODDS2);
 
@@ -806,8 +810,10 @@ IOStatus WritableFileWriter::WriteDirect(const IOOptions& opts) {
   buf_.PadToAlignmentWith(0);
 
   const char* src = buf_.BufferStart();
+    void *ssrc = (void *)src;
   uint64_t write_offset = next_write_offset_;
   size_t left = buf_.CurrentSize();
+    size_t src_size = left;
   DataVerificationInfo v_info;
   char checksum_buf[sizeof(uint32_t)];
   Env::IOPriority rate_limiter_priority_used = opts.rate_limiter_priority;
@@ -877,6 +883,32 @@ IOStatus WritableFileWriter::WriteDirect(const IOOptions& opts) {
   } else {
     set_seen_error(s);
   }
+
+    if (!opts.free) {
+        bool is_random;
+        int ret;
+
+        io_u_->xfer_buf = ssrc;
+        io_u_->xfer_buflen = src_size;
+
+        // get_next_offset(ld_, io_u_, &is_random);
+        // io_u_->buflen = get_next_buflen(ld_, io_u_, is_random);
+ 
+        dp_fill_dspec_data(io_u_);
+        fio_ioring_prep(ld_, io_u_);
+
+        io_u_->error = 0;
+        io_u_->resid = 0;
+
+        ret = fio_ioring_queue(ld_, io_u_);
+        if (ret != FIO_Q_QUEUED)
+            return IOStatus::IOError("fio_ioring_queue\n");
+        ret = fio_ioring_commit(ld_);
+        if (ret < 0)
+            return IOStatus::IOError("fio_ioring_commit\n");
+        ret = fio_ioring_getevents(ld_, 1, IODEPTH);
+    }
+
   return s;
 }
 

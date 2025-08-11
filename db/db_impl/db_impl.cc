@@ -1,4 +1,4 @@
-//  Copyright (c) 2011-present, Facebook, Inc.  All rights reserved.
+//  Copyright (c) 2011-present, Facebook, Inc.  All rights reserved.dbimpl
 //  This source code is licensed under both the GPLv2 (found in the
 //  COPYING file in the root directory) and Apache 2.0 License
 //  (found in the LICENSE.Apache file in the root directory).
@@ -13,6 +13,7 @@
 #include <alloca.h>
 #endif
 
+#include <string.h>
 #include <cinttypes>
 #include <cstdio>
 #include <map>
@@ -113,6 +114,8 @@
 #include "util/string_util.h"
 #include "util/udt_util.h"
 #include "utilities/trace/replayer_impl.h"
+
+#include "util/io_uring.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -307,6 +310,47 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname,
   if (write_buffer_manager_) {
     wbm_stall_.reset(new WBMStallInterface());
   }
+
+    //> nk
+    fio_files = (struct fio_file **)calloc(2, sizeof(struct fio_file *));
+
+    for (int i = 0; i < 2; i++) {
+        fio_files[i] = (struct fio_file *)calloc(1, sizeof(struct fio_file));
+    }
+
+    int i;
+    const char dev1_file_name[] = "/dev/ng0n1";
+    fio_files[0]->file_name = (char *)calloc(1, strlen(dev1_file_name) + 1);
+    strcpy(fio_files[0]->file_name, dev1_file_name);
+    printf("fio_files[0]->file_name: %s\n", fio_files[0]->file_name);
+
+    const char dev2_file_name[] = "/dev/ng0n2";
+    fio_files[1]->file_name = (char *)calloc(1, strlen(dev2_file_name) + 1);
+    strcpy(fio_files[1]->file_name, dev2_file_name);
+    printf("fio_files[1]->file_name: %s\n", fio_files[1]->file_name);
+
+	ld = (ioring_data_t *)calloc(1, sizeof(ioring_data_t));
+
+    fio_ioring_init(ld);
+
+    for (i = 0; i < 1; i++) {
+        struct io_u *io_u;
+        io_u = (struct io_u *)calloc(1, sizeof(struct io_u));
+        io_u->index = i;
+        io_u->ddir = DDIR_WRITE;
+        fio_ioring_io_u_init(ld, io_u);
+    }
+    fio_ioring_post_init(ld);
+
+    for (i = 0; i < 2; i++) {
+        struct fio_file *f = fio_files[i];
+        uint64_t file_size;
+        fio_ioring_get_file_size(f);
+        f->file_offset = get_start_offset(ld, f);
+        f->io_size = f->real_file_size - f->file_offset;
+    }
+
+    dp_init(fio_files, 2);
 }
 
 Status DBImpl::Resume() {
@@ -769,6 +813,22 @@ DBImpl::~DBImpl() {
     closing_status_.PermitUncheckedError();
   }
   ThreadStatusUtil::SetThreadOperation(cur_op_type);
+
+    //> nk
+    int i;
+    for (i = 0; i < 2; i++) {
+        close(fio_files[i]->fd);
+        free(fio_files[i]->file_name);
+        free(fio_files[i]);
+    }
+    free(fio_files);
+    for (i = 0; i < 1; i++) {
+        free(ld->io_u_index[i]);
+    }
+    free(ld->io_u_index);
+    free(ld->iovecs);
+    fio_ioring_unmap(ld);
+    free(ld);
 }
 
 void DBImpl::MaybeIgnoreError(Status* s) const {

@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <liburing.h>
 #include <stdint.h>
 
 #include <chrono>
@@ -139,6 +140,9 @@ struct IOOptions {
   // FSSupportedOps, otherwise this feature will not be used.
   bool verify_and_reconstruct_read;
 
+  //> nk
+  bool free;
+
   // EXPERIMENTAL
   Env::IOActivity io_activity = Env::IOActivity::kUnknown;
 
@@ -151,7 +155,8 @@ struct IOOptions {
         type(IOType::kUnknown),
         force_dir_fsync(force_dir_fsync_),
         do_not_recurse(false),
-        verify_and_reconstruct_read(false) {}
+        verify_and_reconstruct_read(false),
+        free(true) {}
 };
 
 struct DirFsyncOptions {

@@ -510,6 +510,10 @@ struct BlockBasedTableBuilder::Rep {
         tail_size(0),
         status_ok(true),
         io_status_ok(true) {
+
+    //> nk
+    file->SetIOU(tbo.ld, tbo.io_u);
+
     if (tbo.target_file_size == 0) {
       buffer_limit = compression_opts.max_dict_buffer_bytes;
     } else if (compression_opts.max_dict_buffer_bytes == 0) {
@@ -655,6 +659,10 @@ struct BlockBasedTableBuilder::Rep {
 
   Rep(const Rep&) = delete;
   Rep& operator=(const Rep&) = delete;
+
+    //> nk
+    ioring_data_t *ld_;
+    struct io_u *io_u_;
 
  private:
   // Synchronize status & io_status accesses across threads from main thread,
@@ -975,6 +983,34 @@ struct BlockBasedTableBuilder::ParallelCompressionRep {
     return block_rep;
   }
 };
+
+std::string read_dev_attr(const std::string &bname, const std::string &attr) {
+    std::string path = "/sys/block/" + bname + "/" + attr;
+
+    int fd = open(path.c_str(), O_RDONLY);
+    if (fd == -1) {
+        perror("Error opening file");
+        return "";
+    }
+
+    struct stat file_stat;
+    if (fstat(fd, &file_stat) == -1) {
+        perror("Error getting file size");
+        close(fd);
+        return "";
+    }
+
+    std::string entry(file_stat.st_size, '\0');
+    ssize_t bytes_read = read(fd, &entry[0], file_stat.st_size);
+    if (bytes_read == -1) {
+        perror("Error reading file");
+        close(fd);
+        return "";
+    }
+
+    close(fd);
+    return entry;
+}
 
 BlockBasedTableBuilder::BlockBasedTableBuilder(
     const BlockBasedTableOptions& table_options, const TableBuilderOptions& tbo,
@@ -1374,6 +1410,7 @@ void BlockBasedTableBuilder::WriteMaybeCompressedBlock(
     r->SetIOStatus(io_s);
     return;
   }
+
   // Old, misleading name of this function: WriteRawBlock
   StopWatch sw(r->ioptions.clock, r->ioptions.stats, WRITE_RAW_BLOCK_MICROS);
   const uint64_t offset = r->get_offset();

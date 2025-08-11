@@ -8,6 +8,13 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #pragma once
+
+#include <fcntl.h>
+#include <liburing.h>
+#include <linux/nvme_ioctl.h>
+#include <stdint.h>
+#include <sys/ioctl.h>
+
 #include <atomic>
 #include <string>
 
@@ -22,6 +29,9 @@
 #include "rocksdb/rate_limiter.h"
 #include "test_util/sync_point.h"
 #include "util/aligned_buffer.h"
+
+#include "util/io_uring.h"
+
 #ifndef NDEBUG
 #include "utilities/fault_injection_fs.h"
 #endif  // NDEBUG
@@ -230,6 +240,15 @@ class WritableFileWriter {
                          IODebugContext* dbg);
 
   static IOStatus PrepareIOOptions(const WriteOptions& wo, IOOptions& opts);
+
+    //> nk
+    ioring_data_t *ld_;
+    struct io_u *io_u_;
+
+    void SetIOU(ioring_data_t *ld, struct io_u *io_u) {
+        ld_ = ld;
+        io_u_ = io_u;
+    }
 
   WritableFileWriter(const WritableFileWriter&) = delete;
 

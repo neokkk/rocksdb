@@ -25,6 +25,8 @@
 #include "table/unique_id_impl.h"
 #include "trace_replay/block_cache_tracer.h"
 
+#include "util/io_uring.h"
+
 namespace ROCKSDB_NAMESPACE {
 
 class Slice;
@@ -163,6 +165,15 @@ struct TableBuilderOptions : public TablePropertiesCollectorFactory::Context {
   // in the table options of the ioptions.table_factory
   bool skip_filters = false;
   const uint64_t cur_file_num;
+
+    //> nk
+    ioring_data_t *ld;
+    struct io_u *io_u;
+
+    void SetIOU(ioring_data_t *ld_, struct io_u *io_u_) {
+        ld = ld_;
+        io_u = io_u_;
+    }
 };
 
 // TableBuilder provides the interface used to build a Table

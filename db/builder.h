@@ -23,6 +23,7 @@
 #include "rocksdb/status.h"
 #include "rocksdb/table_properties.h"
 #include "rocksdb/types.h"
+#include "util/io_u.h"
 
 namespace ROCKSDB_NAMESPACE {
 

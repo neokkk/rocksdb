@@ -181,9 +181,9 @@ Status BuildTable(
 
     std::unique_ptr<BlobFileBuilder> blob_file_builder(
         (mutable_cf_options.enable_blob_files &&
-         tboptions.level_at_creation >=
+        tboptions.level_at_creation >=
              mutable_cf_options.blob_file_starting_level &&
-         blob_file_additions)
+        blob_file_additions)
             ? new BlobFileBuilder(
                   versions, fs, &ioptions, &mutable_cf_options, &file_options,
                   &(tboptions.write_options), tboptions.db_id,

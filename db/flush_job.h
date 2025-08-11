@@ -43,6 +43,10 @@
 #include "util/stop_watch.h"
 #include "util/thread_local.h"
 
+#include "util/fio.h"
+#include "util/io_u.h"
+#include "util/nvme.h"
+
 namespace ROCKSDB_NAMESPACE {
 
 class DBImpl;
@@ -96,6 +100,8 @@ class FlushJob {
   std::list<std::unique_ptr<FlushJobInfo>>* GetCommittedFlushJobsInfo() {
     return &committed_flush_jobs_info_;
   }
+
+    void Setup(ioring_data_t *ld, struct fio_file **fio_files);
 
  private:
   friend class FlushJobTest_GetRateLimiterPriorityForWrite_Test;
@@ -237,6 +243,9 @@ class FlushJob {
   // `earliest_snapshot_` will be output to the penultimate level had it gone
   // through a compaction to the last level.
   SequenceNumber preclude_last_level_min_seqno_ = kMaxSequenceNumber;
+
+    ioring_data_t *ld;
+    struct fio_file **fio_files;
 };
 
 }  // namespace ROCKSDB_NAMESPACE

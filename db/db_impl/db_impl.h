@@ -70,6 +70,14 @@
 #include "util/stop_watch.h"
 #include "util/thread_local.h"
 
+//> nk
+#include "util/fio.h"
+#include "util/io_uring.h"
+#include "util/nvme.h"
+
+struct fio_file;
+struct ioring_data;
+
 namespace ROCKSDB_NAMESPACE {
 
 class Arena;
@@ -3116,6 +3124,10 @@ class DBImpl : public DB {
   // The number of LockWAL called without matching UnlockWAL call.
   // See also lock_wal_write_token_
   uint32_t lock_wal_count_;
+
+    //> nk
+    struct fio_file **fio_files;
+    ioring_data_t *ld;
 };
 
 class GetWithTimestampReadCallback : public ReadCallback {

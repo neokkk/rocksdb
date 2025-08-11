@@ -223,6 +223,9 @@ Status DBImpl::FlushMemTableToOutputFile(
   Status s;
   bool need_cancel = false;
   IOStatus log_io_s = IOStatus::OK();
+
+    flush_job.Setup(ld, fio_files);
+
   if (needs_to_sync_closed_wals) {
     // SyncClosedWals() may unlock and re-lock the log_write_mutex multiple
     // times.

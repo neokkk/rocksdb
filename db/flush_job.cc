@@ -145,7 +145,18 @@ FlushJob::FlushJob(
   TEST_SYNC_POINT("FlushJob::FlushJob()");
 }
 
-FlushJob::~FlushJob() { ThreadStatusUtil::ResetThreadStatus(); }
+FlushJob::~FlushJob() {
+    ThreadStatusUtil::ResetThreadStatus();
+}
+
+//> nk
+void FlushJob::Setup(ioring_data_t *ld_, struct fio_file **fio_files_) {
+    printf("FlushJob::Setup()\n");
+    printf("%s\n", fio_files_[0]->file_name);
+
+    ld = ld_;
+    fio_files = fio_files_;
+}
 
 void FlushJob::ReportStartedFlush() {
   ThreadStatusUtil::SetEnableTracking(db_options_.enable_thread_tracking);
@@ -999,6 +1010,19 @@ Status FlushJob::WriteLevel0Table() {
               : std::min(earliest_snapshot_, preclude_last_level_min_seqno_));
       const SequenceNumber job_snapshot_seq =
           job_context_->GetJobSnapshotSequence();
+
+        //> nk
+        struct fio_file *f = fio_files[0];
+        struct io_u *io_u = ld->io_u_index[0];
+
+        fio_ioring_cmd_open_file(ld, f);
+        for (int i = 0; i < DDIR_RWDIR_CNT; i++) {
+            f->last_pos[i] = f->file_offset;
+            f->last_start[i] = -1ULL;
+        }
+        io_u->file = f;
+        zbd_file_reset(ld, f);
+        tboptions.SetIOU(ld, io_u);
 
       s = BuildTable(
           dbname_, versions_, db_options_, tboptions, file_options_,
