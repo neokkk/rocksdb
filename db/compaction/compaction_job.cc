@@ -58,7 +58,7 @@
 #include "util/stop_watch.h"
 
 namespace ROCKSDB_NAMESPACE {
-extern void set_tick(TICK_TYPE type);
+extern void set_tick(int level, TICK_TYPE type);
 
 const char* GetCompactionReasonString(CompactionReason compaction_reason) {
   switch (compaction_reason) {
@@ -1792,7 +1792,7 @@ Status CompactionJob::FinishCompactionOutputFile(
   const time_t seconds = now_tv.tv_sec;
   struct tm t;
 
-  set_tick(COMPACTION_TICK);
+  set_tick(output_level, COMPACTION_TICK);
 
   port::LocalTimeR(&seconds, &t);
   ss << t.tm_year + 1900 << "/" << t.tm_mon + 1 << "/" << t.tm_mday << "-";

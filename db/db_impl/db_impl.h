@@ -72,9 +72,9 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-void set_tick(TICK_TYPE type);
-
 uint64_t get_tick();
+
+void set_tick(int level, TICK_TYPE type);
 
 class Arena;
 class ArenaWrappedDBIter;

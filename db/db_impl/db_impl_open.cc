@@ -7,6 +7,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #include <cinttypes>
+#include <fcntl.h>
 
 #include "db/builder.h"
 #include "db/db_impl/db_impl.h"
@@ -30,6 +31,9 @@
 #include "util/udt_util.h"
 
 namespace ROCKSDB_NAMESPACE {
+
+extern int tick_log_fd;
+
 Options SanitizeOptions(const std::string& dbname, const Options& src,
                         bool read_only, Status* logger_creation_s) {
   auto db_options =
@@ -2445,6 +2449,16 @@ Status DBImpl::Open(const DBOptions& db_options, const std::string& dbname,
   }
   if (!s.ok()) {
     return s;
+  }
+
+  //> nk
+  if (tick_log_fd < 0) { // open once
+    std::stringstream ss;
+    auto now = std::chrono::system_clock::now();
+    auto ms_since_epoch = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    ss << "tick_" << ms_since_epoch % 100000 << ".log";
+    tick_log_fd = open(ss.str().c_str(), O_CREAT | O_WRONLY | O_APPEND);
+    printf("%s fd: %d\n", ss.str().c_str(), tick_log_fd);
   }
 
   impl->wal_in_db_path_ = impl->immutable_db_options_.IsWalDirSameAsDBPath();

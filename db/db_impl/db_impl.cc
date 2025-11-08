@@ -15,14 +15,18 @@
 
 #include <cinttypes>
 #include <cstdio>
+#include <fcntl.h>
+#include <unistd.h>
 #include <iostream>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -123,7 +127,56 @@ namespace ROCKSDB_NAMESPACE {
 uint64_t flush_num = 0;
 uint64_t compaction_num = 0;
 
-void set_tick(TICK_TYPE type) {
+typedef std::tuple<uint64_t, int, TICK_TYPE> TICK_LOG; // tick, level, tick_type
+std::vector<std::string> tick_logs;
+int tick_log_fd = -1;
+static size_t tick_logs_bytes = 0;
+static const size_t kFlushThreshold = 4096;
+char tick_log_buf[64];
+static std::mutex tick_logs_mu;
+
+uint64_t get_tick() {
+  return flush_num + compaction_num;
+}
+
+void append_tick_log(uint64_t tick, int level, TICK_TYPE type) {
+  int n = snprintf(tick_log_buf, sizeof(tick_log_buf), "%llu\t%d\t%d\n",
+                     (unsigned long long)tick, level, type);
+  if (n <= 0) return;
+
+  std::lock_guard<std::mutex> lg(tick_logs_mu);
+  tick_logs.emplace_back(tick_log_buf, tick_log_buf + n);
+  tick_logs_bytes += static_cast<size_t>(n);
+
+  if (tick_logs_bytes >= kFlushThreshold) {
+    // swap()으로 잠깐 버퍼 빼와서 락 점유 최소화
+    std::vector<std::string> batch;
+    batch.swap(tick_logs);
+    tick_logs_bytes = 0;
+    lg.~lock_guard();  // 명시적 해제 (optional, 여기선 scope로도 됨)
+
+    // write
+    for (auto &s : batch) {
+      const char* p = s.data();
+      size_t rem = s.size();
+      while (rem > 0) {
+        ssize_t w = ::write(tick_log_fd, p, rem);
+        if (w < 0) {
+          if (errno == EINTR) continue;
+          break;
+        }
+        p += w;
+        rem -= static_cast<size_t>(w);
+      }
+    }
+    printf("write to log file\n");
+    // 내구성 필요 시 fdatasync(tick_log_fd);
+  }
+}
+
+void set_tick(int level, TICK_TYPE type) {
+  uint64_t tick = get_tick();
+
   switch (type) {
     case FLUSH_TICK:
       flush_num++;
@@ -133,11 +186,10 @@ void set_tick(TICK_TYPE type) {
       break;
     default:
       printf("Invalid tick type!\n");
+    return;
   }
-}
 
-uint64_t get_tick() {
-  return flush_num + compaction_num;
+  append_tick_log(tick, level, type);
 }
 
 const std::string kDefaultColumnFamilyName("default");
@@ -5256,6 +5308,11 @@ Status DBImpl::Close() {
   InstrumentedMutexLock closing_lock_guard(&closing_mutex_);
   if (closed_) {
     return closing_status_;
+  }
+
+  if (tick_log_fd > 0) {
+    close(tick_log_fd);
+    tick_log_fd = -1;
   }
 
   {
